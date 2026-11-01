@@ -82,4 +82,39 @@ public interface RunepixelsConfig extends Config
 	{
 		return false;
 	}
+
+	@ConfigItem(
+		keyName = "syncBossKills",
+		name = "Boss kill times",
+		description = "Send your boss kill times to Runepixels. Kills are recorded as you complete them, "
+			+ "only when the game shows a fight duration",
+		section = syncSection,
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
+		position = 5
+	)
+	default boolean syncBossKills()
+	{
+		return false;
+	}
+
+	@ConfigSection(
+		name = "Tools",
+		description = "Lookups from the Runepixels panel",
+		position = 1
+	)
+	String toolsSection = "tools";
+
+	@ConfigItem(
+		keyName = "lookupPlayers",
+		name = "Player lookup",
+		description = "Adds Runepixels lookup to the right-click menu of players and enables the Lookup tab. "
+			+ "The looked-up name is sent to Runepixels. Hidden in the Wilderness and on PvP worlds",
+		section = toolsSection,
+		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
+		position = 0
+	)
+	default boolean lookupPlayers()
+	{
+		return false;
+	}
 }

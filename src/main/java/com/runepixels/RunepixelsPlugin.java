@@ -1,10 +1,13 @@
 package com.runepixels;
 
 import com.google.inject.Provides;
+import com.runepixels.bosses.BossKillSync;
+import com.runepixels.bosses.BossTimersPanel;
 import com.runepixels.clan.ClanSync;
 import com.runepixels.collectionlog.CollectionLogSync;
 import com.runepixels.combattasks.CombatTaskSync;
 import com.runepixels.diaries.DiarySync;
+import com.runepixels.lookup.LookupPanel;
 import com.runepixels.quests.QuestSync;
 import java.util.EnumSet;
 import java.util.List;
@@ -15,15 +18,20 @@ import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
+import net.runelite.api.MenuAction;
 import net.runelite.api.Player;
 import net.runelite.api.WorldType;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.events.MenuOptionClicked;
+import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
+import net.runelite.client.game.ItemManager;
+import net.runelite.client.menus.MenuManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
@@ -46,6 +54,13 @@ public class RunepixelsPlugin extends Plugin
 		WorldType.QUEST_SPEEDRUNNING,
 		WorldType.LAST_MAN_STANDING
 	);
+	private static final EnumSet<WorldType> PVP_WORLDS = EnumSet.of(
+		WorldType.PVP,
+		WorldType.HIGH_RISK,
+		WorldType.DEADMAN,
+		WorldType.PVP_ARENA
+	);
+	private static final String LOOKUP_OPTION = "Runepixels lookup";
 
 	@Inject
 	private Client client;
@@ -78,10 +93,25 @@ public class RunepixelsPlugin extends Plugin
 	private ClanSync clanSync;
 
 	@Inject
+	private BossKillSync bossKillSync;
+
+	@Inject
 	private ClientToolbar clientToolbar;
+
+	@Inject
+	private RunepixelsConfig config;
+
+	@Inject
+	private ItemManager itemManager;
+
+	@Inject
+	private MenuManager menuManager;
 
 	private List<Sync> syncs;
 	private NavigationButton navigationButton;
+	private RunepixelsPanel panel;
+	private LookupPanel lookupPanel;
+	private boolean lookupMenuAdded;
 	private boolean pendingLogin;
 	private long lastSyncedAccountHash = -1;
 	private final Set<String> revertingKeys = ConcurrentHashMap.newKeySet();
@@ -89,15 +119,20 @@ public class RunepixelsPlugin extends Plugin
 	@Override
 	protected void startUp() throws Exception
 	{
-		syncs = List.of(questSync, diarySync, combatTaskSync, collectionLogSync, clanSync);
+		syncs = List.of(questSync, diarySync, combatTaskSync, collectionLogSync, clanSync, bossKillSync);
 		syncs.forEach(eventBus::register);
 		pendingLogin = client.getGameState() == GameState.LOGGED_IN;
+
+		lookupPanel = new LookupPanel(api, itemManager, config, this::lookupSelf);
+		BossTimersPanel timersPanel = new BossTimersPanel(api, config, bossKillSync);
+		panel = new RunepixelsPanel(timersPanel, lookupPanel);
+		bossKillSync.setOnChange(boss -> SwingUtilities.invokeLater(() -> timersPanel.onKillsChanged(boss)));
 
 		navigationButton = NavigationButton.builder()
 			.tooltip("Runepixels")
 			.icon(ImageUtil.loadImageResource(getClass(), "icon.png"))
 			.priority(10)
-			.panel(new RunepixelsPanel(clientThread, clanSync))
+			.panel(panel)
 			.build();
 		clientToolbar.addNavigation(navigationButton);
 	}
@@ -105,6 +140,8 @@ public class RunepixelsPlugin extends Plugin
 	@Override
 	protected void shutDown() throws Exception
 	{
+		setLookupMenu(false);
+		bossKillSync.setOnChange(null);
 		clientToolbar.removeNavigation(navigationButton);
 		syncs.forEach(eventBus::unregister);
 		pendingLogin = false;
@@ -196,8 +233,78 @@ public class RunepixelsPlugin extends Plugin
 	}
 
 	@Subscribe
+	public void onMenuOptionClicked(MenuOptionClicked event)
+	{
+		if (event.getMenuAction() != MenuAction.RUNELITE_PLAYER || !LOOKUP_OPTION.equals(event.getMenuOption()))
+		{
+			return;
+		}
+
+		Player player = event.getMenuEntry().getPlayer();
+		if (player == null || player.getName() == null)
+		{
+			return;
+		}
+
+		String name = Text.toJagexName(player.getName());
+		SwingUtilities.invokeLater(() ->
+		{
+			clientToolbar.openPanel(navigationButton);
+			panel.showLookup();
+			lookupPanel.lookup(name);
+		});
+	}
+
+	private void lookupSelf()
+	{
+		clientThread.invoke(() ->
+		{
+			Player player = client.getLocalPlayer();
+			String name = player == null || player.getName() == null ? null : Text.toJagexName(player.getName());
+			SwingUtilities.invokeLater(() -> lookupPanel.lookup(name));
+		});
+	}
+
+	private void setLookupMenu(boolean enabled)
+	{
+		if (enabled == lookupMenuAdded)
+		{
+			return;
+		}
+
+		if (enabled)
+		{
+			menuManager.addPlayerMenuItem(LOOKUP_OPTION);
+		}
+		else
+		{
+			menuManager.removePlayerMenuItem(LOOKUP_OPTION);
+		}
+		lookupMenuAdded = enabled;
+	}
+
+	private boolean isPvp()
+	{
+		if (client.getVarbitValue(VarbitID.INSIDE_WILDERNESS) == 1 || client.getVarbitValue(VarbitID.PVP_AREA_CLIENT) == 1)
+		{
+			return true;
+		}
+
+		for (WorldType type : client.getWorldType())
+		{
+			if (PVP_WORLDS.contains(type))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	@Subscribe
 	public void onGameTick(GameTick event)
 	{
+		setLookupMenu(config.lookupPlayers() && !isPvp());
+
 		if (!anySyncEnabled())
 		{
 			return;
@@ -248,6 +355,7 @@ public class RunepixelsPlugin extends Plugin
 			if (client.getAccountHash() == accountHash)
 			{
 				lastSyncedAccountHash = accountHash;
+				bossKillSync.accountLinked();
 				syncs.forEach(Sync::request);
 			}
 		}));

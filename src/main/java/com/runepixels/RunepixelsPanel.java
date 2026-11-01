@@ -1,58 +1,47 @@
 package com.runepixels;
 
-import com.runepixels.clan.ClanSync;
+import com.runepixels.bosses.BossTimersPanel;
+import com.runepixels.lookup.LookupPanel;
 import java.awt.BorderLayout;
-import java.awt.GridLayout;
-import javax.swing.JButton;
-import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
-import net.runelite.client.callback.ClientThread;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.PluginPanel;
+import net.runelite.client.ui.components.materialtabs.MaterialTab;
+import net.runelite.client.ui.components.materialtabs.MaterialTabGroup;
 
 class RunepixelsPanel extends PluginPanel
 {
-	private final JLabel status = new JLabel();
+	private final MaterialTabGroup tabs;
+	private final MaterialTab lookupTab;
 
-	RunepixelsPanel(ClientThread clientThread, ClanSync clanSync)
+	RunepixelsPanel(BossTimersPanel timersPanel, LookupPanel lookupPanel)
 	{
-		setLayout(new BorderLayout());
+		setLayout(new BorderLayout(0, 8));
 		setBorder(new EmptyBorder(10, 10, 10, 10));
 		setBackground(ColorScheme.DARK_GRAY_COLOR);
 
-		JLabel title = new JLabel("Clan");
-		title.setForeground(ColorScheme.BRAND_ORANGE);
+		JPanel display = new JPanel(new BorderLayout());
+		display.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
-		JButton sync = new JButton("Sync clan");
-		sync.addActionListener(e ->
+		tabs = new MaterialTabGroup(display);
+		MaterialTab timersTab = new MaterialTab("Timers", tabs, timersPanel);
+		timersTab.setOnSelectEvent(() ->
 		{
-			sync.setEnabled(false);
-			clientThread.invoke(() ->
-			{
-				String message = clanSync.requestManualSync();
-				SwingUtilities.invokeLater(() ->
-				{
-					setStatus(message);
-					sync.setEnabled(true);
-				});
-			});
+			timersPanel.refresh();
+			return true;
 		});
+		lookupTab = new MaterialTab("Lookup", tabs, lookupPanel);
+		tabs.addTab(timersTab);
+		tabs.addTab(lookupTab);
+		tabs.select(timersTab);
 
-		status.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-
-		JPanel content = new JPanel(new GridLayout(0, 1, 0, 8));
-		content.setBackground(ColorScheme.DARK_GRAY_COLOR);
-		content.add(title);
-		content.add(sync);
-		content.add(status);
-
-		add(content, BorderLayout.NORTH);
+		add(tabs, BorderLayout.NORTH);
+		add(display, BorderLayout.CENTER);
 	}
 
-	private void setStatus(String message)
+	void showLookup()
 	{
-		status.setText("<html>" + message + "</html>");
+		tabs.select(lookupTab);
 	}
 }
