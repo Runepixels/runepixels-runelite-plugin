@@ -73,7 +73,7 @@ public interface RunepixelsConfig extends Config
 	@ConfigItem(
 		keyName = "syncClan",
 		name = "Clan",
-		description = "Allow clan owners and deputy owners to send the clan name, members and ranks to Runepixels from the Runepixels panel",
+		description = "Send your clan name, members and ranks to Runepixels when you log in. Only sent if you are the clan owner or a deputy owner",
 		section = syncSection,
 		warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
 		position = 4
