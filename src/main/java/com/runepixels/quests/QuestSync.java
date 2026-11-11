@@ -86,7 +86,7 @@ public class QuestSync extends Sync
 				intField(row, DBTableID.Quest.COL_TYPE),
 				intField(row, DBTableID.Quest.COL_DIFFICULTY),
 				intField(row, DBTableID.Quest.COL_MEMBERS) != 0,
-				intField(row, DBTableID.Quest.COL_QUESTPOINTS)
+				intField(row, DBTableID.Quest.COL_QUESTPOINTS_OVERRIDE)
 			));
 		}
 
